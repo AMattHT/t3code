@@ -13,7 +13,7 @@ import * as Stream from "effect/Stream";
 import type * as Types from "effect/Types";
 import { AiError, McpProtocol, McpSchema, McpServer, Tool, type Toolkit } from "effect/ai";
 import { HttpRouter, HttpServerRequest, HttpServerResponse } from "effect/http";
-import { OrchestratorMcpFailure, PreviewAutomationError } from "@t3tools/contracts";
+import { McpServerError, OrchestratorMcpFailure, PreviewAutomationError } from "@t3tools/contracts";
 
 import packageJson from "../../package.json" with { type: "json" };
 import * as ServerConfig from "../config.ts";
@@ -56,6 +56,13 @@ import {
   DeviceStandardToolkit,
 } from "./toolkits/device/tools.ts";
 import * as HtmlHandlers from "./toolkits/html/handlers.ts";
+import * as McpServersHandlers from "./toolkits/mcpServers/handlers.ts";
+import {
+  McpServersCallTool,
+  McpServersCallToolkit,
+  McpServersListToolkit,
+} from "./toolkits/mcpServers/tools.ts";
+import * as McpServerConnections from "../mcpServers/McpServerConnections.ts";
 import { HtmlPreviewTool, HtmlPreviewToolkit, HtmlRenderToolkit } from "./toolkits/html/tools.ts";
 
 /** Where an MCP client discovers how to sign in (RFC 9728), at this request's own origin. */
@@ -624,6 +631,39 @@ const imageToolFailure =
     }).pipe(Effect.as(result));
   };
 
+/** The PNG as an image block and the rest of the payload as JSON metadata. */
+const imageToolResult = (encodedResult: unknown, payload: unknown) => {
+  const { screenshot, ...rest } = encodedResult as ImageToolResult;
+  const includeImage =
+    (payload as { readonly includeImage?: boolean } | undefined)?.includeImage !== false;
+  const metadata = {
+    ...rest,
+    screenshot: {
+      mimeType: screenshot.mimeType,
+      width: screenshot.width,
+      height: screenshot.height,
+    },
+  };
+  return Effect.succeed(
+    new McpSchema.CallToolResult({
+      isError: false,
+      structuredContent: metadata,
+      content: [
+        { type: "text", text: JSON.stringify(metadata) },
+        ...(includeImage
+          ? [
+              {
+                type: "image" as const,
+                data: new Uint8Array(Buffer.from(screenshot.data, "base64")),
+                mimeType: screenshot.mimeType,
+              },
+            ]
+          : []),
+      ],
+    }),
+  );
+};
+
 /**
  * `McpServer.toolkit` serializes every result as JSON text, which is the
  * wrong shape for a screenshot: the model needs image content. Tools whose
@@ -642,6 +682,22 @@ const registerImageTool = <T extends Tool.Any, E, R>(
   >,
   operation: string,
   failureText: string | ((error: E) => string),
+) => registerRawResultTool(tool, handle, provide, operation, failureText, imageToolResult);
+
+/** A hand-registered tool whose handler result becomes MCP content through `toResult`. */
+const registerRawResultTool = <T extends Tool.Any, E, R>(
+  tool: T,
+  handle: (payload: Tool.Parameters<T>) => Effect.Effect<{ readonly encodedResult: unknown }, E, R>,
+  provide: (
+    effect: Effect.Effect<{ readonly encodedResult: unknown }, E, R>,
+  ) => Effect.Effect<
+    { readonly encodedResult: unknown },
+    E,
+    McpInvocationContext.McpInvocationContext
+  >,
+  operation: string,
+  failureText: string | ((error: E) => string),
+  toResult: (encodedResult: unknown, payload: unknown) => Effect.Effect<McpSchema.CallToolResult>,
 ) =>
   Effect.gen(function* () {
     const server = yield* McpServer.McpServer;
@@ -672,38 +728,7 @@ const registerImageTool = <T extends Tool.Any, E, R>(
             Effect.provideService(McpInvocationContext.McpInvocationContext, invocation),
             Effect.matchCauseEffect({
               onFailure: imageToolFailure(tool.name, operation, failureText),
-              onSuccess: ({ encodedResult }) => {
-                const { screenshot, ...rest } = encodedResult as ImageToolResult;
-                const includeImage =
-                  (payload as { readonly includeImage?: boolean } | undefined)?.includeImage !==
-                  false;
-                const metadata = {
-                  ...rest,
-                  screenshot: {
-                    mimeType: screenshot.mimeType,
-                    width: screenshot.width,
-                    height: screenshot.height,
-                  },
-                };
-                return Effect.succeed(
-                  new McpSchema.CallToolResult({
-                    isError: false,
-                    structuredContent: metadata,
-                    content: [
-                      { type: "text", text: JSON.stringify(metadata) },
-                      ...(includeImage
-                        ? [
-                            {
-                              type: "image" as const,
-                              data: new Uint8Array(Buffer.from(screenshot.data, "base64")),
-                              mimeType: screenshot.mimeType,
-                            },
-                          ]
-                        : []),
-                    ],
-                  }),
-                );
-              },
+              onSuccess: ({ encodedResult }) => toResult(encodedResult, payload),
             }),
           );
         }),
@@ -731,6 +756,7 @@ const registerDeviceScreenshot = Effect.fn("McpHttpServer.registerDeviceScreensh
 });
 
 const isOrchestratorMcpFailure = Schema.is(OrchestratorMcpFailure);
+const isMcpServerError = Schema.is(McpServerError);
 
 const registerHtmlPreview = Effect.fn("McpHttpServer.registerHtmlPreview")(function* () {
   const htmlRender = yield* HtmlRender.HtmlRender;
@@ -753,6 +779,48 @@ const registerHtmlPreview = Effect.fn("McpHttpServer.registerHtmlPreview")(funct
       isOrchestratorMcpFailure(error) || AiError.isAiError(error)
         ? error.message
         : "HTML preview failed.",
+  );
+});
+
+const decodeUpstreamResult = Schema.decodeUnknownEffect(McpSchema.CallToolResult);
+
+/**
+ * An upstream server's result passes through as its own content blocks, so
+ * images and audio reach the model as media rather than JSON text.
+ */
+const upstreamToolResult = (encodedResult: unknown) =>
+  decodeUpstreamResult(encodedResult).pipe(
+    Effect.orElseSucceed(
+      () =>
+        new McpSchema.CallToolResult({
+          isError: false,
+          content: [{ type: "text", text: JSON.stringify(encodedResult) }],
+        }),
+    ),
+  );
+
+const registerMcpServersCall = Effect.fn("McpHttpServer.registerMcpServersCall")(function* () {
+  const connections = yield* McpServerConnections.McpServerConnections;
+  const threads = yield* ThreadManagementService.ThreadManagementService;
+  const built = yield* McpServersCallToolkit;
+  yield* registerRawResultTool(
+    McpServersCallTool,
+    (payload) =>
+      built
+        .handle("mcp_servers_call", payload)
+        .pipe(Stream.unwrap, Stream.run(Sink.last()), Effect.flatMap(Effect.fromOption)),
+    (effect) =>
+      effect.pipe(
+        Effect.provideService(McpServerConnections.McpServerConnections, connections),
+        Effect.provideService(ThreadManagementService.ThreadManagementService, threads),
+      ),
+    "callTool",
+    // Every message here is written by T3 for the agent, never upstream output.
+    (error) =>
+      isOrchestratorMcpFailure(error) || isMcpServerError(error)
+        ? error.message
+        : "MCP server tool call failed.",
+    upstreamToolResult,
   );
 });
 
@@ -835,6 +903,11 @@ const layerDeviceScreenshotRegistration = imageToolRegistration(
   DeviceHandlers.layerScreenshot,
 );
 
+export const layerMcpServersToolkit = Layer.mergeAll(
+  toolkitRegistration(McpServersListToolkit, McpServersHandlers.layerList),
+  imageToolRegistration(registerMcpServersCall(), McpServersHandlers.layerCall),
+);
+
 export const layerDeviceToolkit = Layer.mergeAll(
   layerDeviceStandardToolkitRegistration,
   layerDeviceScreenshotRegistration,
@@ -859,4 +932,5 @@ export const layer = Layer.mergeAll(
   layerPullRequestsToolkit,
   layerDeviceToolkit,
   layerHtmlToolkit,
+  layerMcpServersToolkit,
 ).pipe(Layer.provideMerge(layerMcpTransport));

@@ -145,6 +145,19 @@ describe("RPC authorization scopes", () => {
     expect(requiredScopeForRpcMethod(WS_METHODS.skillLibraryList)).toBe(AuthOrchestrationReadScope);
   });
 
+  it("requires settings writes to change MCP servers or their sign-ins", () => {
+    for (const method of [
+      WS_METHODS.mcpServersAdd,
+      WS_METHODS.mcpServersRemove,
+      WS_METHODS.mcpServersSetEnabled,
+      WS_METHODS.mcpServersSignIn,
+      WS_METHODS.mcpServersSignOut,
+    ]) {
+      expect(requiredScopeForRpcMethod(method)).toBe(AuthSettingsWriteScope);
+    }
+    expect(requiredScopeForRpcMethod(WS_METHODS.mcpServersList)).toBe(AuthOrchestrationReadScope);
+  });
+
   it("separates viewing pull request file progress from writing it", () => {
     expect(requiredScopeForRpcMethod(WS_METHODS.pullRequestsFilesViewed)).toBe(
       AuthOrchestrationReadScope,

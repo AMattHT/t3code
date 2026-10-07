@@ -19,6 +19,7 @@ export type SettingsPath =
   | "/settings/snap-shot"
   | "/settings/providers"
   | "/settings/skills"
+  | "/settings/mcp"
   | "/settings/integrations"
   | "/settings/scheduled-tasks"
   | "/settings/source-control"
@@ -95,6 +96,7 @@ export const SETTINGS_SECTION_LABELS: Readonly<Record<SettingsPath, string>> = {
   "/settings/snap-shot": "SnapShots",
   "/settings/providers": "Providers",
   "/settings/skills": "Skills",
+  "/settings/mcp": "MCP servers",
   "/settings/integrations": "Integrations",
   "/settings/scheduled-tasks": "Scheduled Tasks",
   "/settings/source-control": "Source Control",
@@ -626,6 +628,15 @@ export const SETTINGS_SEARCH_ITEMS = [
     searchTerms: ["github repository install agent skills skill.md library link providers"],
   },
   {
+    id: "mcp-servers",
+    title: "MCP servers",
+    to: "/settings/mcp",
+    environmentOnly: true,
+    searchTerms: [
+      "mcp model context protocol connect sign in oauth tools remote server higgsfield",
+    ],
+  },
+  {
     id: "agent-browser-access",
     title: "Agent browser access",
     to: "/settings/integrations",
@@ -939,6 +950,7 @@ const SETTINGS_CATEGORY_SCOPES: Readonly<Record<SettingsPath, SettingsSearchScop
   "/settings/keybindings": null,
   "/settings/providers": null,
   "/settings/skills": null,
+  "/settings/mcp": null,
   "/settings/integrations": null,
   "/settings/source-control": "environment-defaults",
   "/settings/storage": "project-defaults",

@@ -280,6 +280,15 @@ import {
   SkillLibrarySetEnabledInput,
   SkillLibraryState,
 } from "./skillLibrary.ts";
+import {
+  McpServerAddInput,
+  McpServerError,
+  McpServerIdInput,
+  McpServerSetEnabledInput,
+  McpServerSignInInput,
+  McpServerSignInResult,
+  McpServersState,
+} from "./mcpServers.ts";
 import {} from "./previewAutomation.ts";
 import {
   ServerConfigStreamEvent,
@@ -463,6 +472,14 @@ export const WS_METHODS = {
   skillLibraryUpdate: "skillLibrary.update",
   skillLibraryRemove: "skillLibrary.remove",
   skillLibrarySetEnabled: "skillLibrary.setEnabled",
+
+  // MCP server methods
+  mcpServersList: "mcpServers.list",
+  mcpServersAdd: "mcpServers.add",
+  mcpServersRemove: "mcpServers.remove",
+  mcpServersSetEnabled: "mcpServers.setEnabled",
+  mcpServersSignIn: "mcpServers.signIn",
+  mcpServersSignOut: "mcpServers.signOut",
 
   // Server meta
   serverProbe: "server.probe",
@@ -1580,6 +1597,44 @@ const WsSkillLibrarySetEnabledRpc = Rpc.make(WS_METHODS.skillLibrarySetEnabled, 
   error: Schema.Union([SkillLibraryError, EnvironmentAuthorizationError]),
 });
 
+const McpServersRpcError = Schema.Union([McpServerError, EnvironmentAuthorizationError]);
+
+const WsMcpServersListRpc = Rpc.make(WS_METHODS.mcpServersList, {
+  payload: Schema.Struct({}),
+  success: McpServersState,
+  error: McpServersRpcError,
+});
+
+const WsMcpServersAddRpc = Rpc.make(WS_METHODS.mcpServersAdd, {
+  payload: McpServerAddInput,
+  success: McpServersState,
+  error: McpServersRpcError,
+});
+
+const WsMcpServersRemoveRpc = Rpc.make(WS_METHODS.mcpServersRemove, {
+  payload: McpServerIdInput,
+  success: McpServersState,
+  error: McpServersRpcError,
+});
+
+const WsMcpServersSetEnabledRpc = Rpc.make(WS_METHODS.mcpServersSetEnabled, {
+  payload: McpServerSetEnabledInput,
+  success: McpServersState,
+  error: McpServersRpcError,
+});
+
+const WsMcpServersSignInRpc = Rpc.make(WS_METHODS.mcpServersSignIn, {
+  payload: McpServerSignInInput,
+  success: McpServerSignInResult,
+  error: McpServersRpcError,
+});
+
+const WsMcpServersSignOutRpc = Rpc.make(WS_METHODS.mcpServersSignOut, {
+  payload: McpServerIdInput,
+  success: McpServersState,
+  error: McpServersRpcError,
+});
+
 const WsSubscribeDeviceStateRpc = Rpc.make(WS_METHODS.subscribeDeviceState, {
   payload: Schema.Struct({}),
   success: DeviceServiceState,
@@ -1994,6 +2049,12 @@ export const WsRpcGroup = RpcGroup.make(
   WsSkillLibraryUpdateRpc,
   WsSkillLibraryRemoveRpc,
   WsSkillLibrarySetEnabledRpc,
+  WsMcpServersListRpc,
+  WsMcpServersAddRpc,
+  WsMcpServersRemoveRpc,
+  WsMcpServersSetEnabledRpc,
+  WsMcpServersSignInRpc,
+  WsMcpServersSignOutRpc,
   WsSubscribeServerConfigRpc,
   WsSubscribeServerLifecycleRpc,
   WsSubscribeAuthAccessRpc,

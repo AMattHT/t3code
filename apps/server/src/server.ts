@@ -103,6 +103,8 @@ import * as SourceControlProviderRegistry from "./sourceControl/SourceControlPro
 import * as PullRequestReadCache from "./pullRequest/PullRequestReadCache.ts";
 import * as SourceControlRateLimit from "./sourceControl/SourceControlRateLimit.ts";
 import * as SkillLibrary from "./skills/SkillLibrary.ts";
+import * as McpServerConnections from "./mcpServers/McpServerConnections.ts";
+import * as McpServersHttp from "./mcpServers/http.ts";
 import * as SourceControlRepositoryService from "./sourceControl/SourceControlRepositoryService.ts";
 import * as WorktreeSetupTracker from "./project/WorktreeSetupTracker.ts";
 import * as Observability from "./observability/Observability.ts";
@@ -559,6 +561,7 @@ const layerRuntimeCoreDependenciesBase = Layer.mergeAll(
   layerProviderInstallationRefresh,
   ReplayMarkers.layer,
   SkillLibrary.layer,
+  McpServerConnections.layer.pipe(Layer.provide(ServerSecretStore.layer)),
 ).pipe(
   // Core Services
   Layer.provideMerge(layerOrchestrationApplication),
@@ -669,6 +672,7 @@ const layerMakeRoutes = Layer.mergeAll(
     ),
     ServerHttp.layerOtlpTracesProxyRoute,
     ServerHttp.layerAssetRoute,
+    McpServersHttp.layerCallbackRoute,
     ServerHttp.layerAttachmentUploadRoute,
     DeviceHubProxy.layer,
     ServerBrowserStream.routeLayer,

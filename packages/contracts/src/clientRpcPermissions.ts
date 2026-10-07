@@ -45,6 +45,12 @@ export const CLIENT_GUARDED_RPC_SCOPES = {
   [WS_METHODS.skillLibraryUpdate]: AuthSettingsWriteScope,
   [WS_METHODS.skillLibraryRemove]: AuthSettingsWriteScope,
   [WS_METHODS.skillLibrarySetEnabled]: AuthSettingsWriteScope,
+
+  [WS_METHODS.mcpServersAdd]: AuthSettingsWriteScope,
+  [WS_METHODS.mcpServersRemove]: AuthSettingsWriteScope,
+  [WS_METHODS.mcpServersSetEnabled]: AuthSettingsWriteScope,
+  [WS_METHODS.mcpServersSignIn]: AuthSettingsWriteScope,
+  [WS_METHODS.mcpServersSignOut]: AuthSettingsWriteScope,
 } as const;
 export type ClientGuardedRpcTag = keyof typeof CLIENT_GUARDED_RPC_SCOPES;
 

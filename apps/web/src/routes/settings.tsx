@@ -153,8 +153,12 @@ function SettingsRouteLayout() {
   return (
     <SettingsScopeProvider
       search={rawSearch}
-      // Providers and skills are installed on one machine at a time.
-      singleEnvironment={pathname === "/settings/providers" || pathname === "/settings/skills"}
+      // Providers, skills, and MCP servers belong to one machine at a time.
+      singleEnvironment={
+        pathname === "/settings/providers" ||
+        pathname === "/settings/skills" ||
+        pathname === "/settings/mcp"
+      }
       onChange={(next) => {
         // Send every axis so the retain middleware sees an explicit target
         // even when the choice is "all", which is the absence of a key.

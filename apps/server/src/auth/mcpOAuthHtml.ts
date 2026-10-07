@@ -44,3 +44,8 @@ export function renderErrorPage(description: string): string {
     <p>Close this page and start the sign-in again from your agent.</p>`,
   );
 }
+
+/** A plain server page with a heading and one paragraph, both escaped. */
+export function renderPage(title: string, message: string): string {
+  return shell(title, `<h1>${escapeHtml(title)}</h1>\n    <p>${escapeHtml(message)}</p>`);
+}
