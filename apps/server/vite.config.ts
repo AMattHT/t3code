@@ -63,6 +63,32 @@ const packExecutableTargets = packExecutableTarget
     ]
   : undefined;
 
+// zod stays on disk because the Cursor SDK loads it from there (see
+// cli-external-packages.ts), but the bundled MCP client imports it as ESM, and
+// a single-executable can only `import` built-ins. These virtual CommonJS
+// modules re-export the on-disk package through `require`, which the bundler
+// emits as a createRequire call that also works inside the executable.
+const ZOD_FROM_DISK_PREFIX = "\0t3:zod-from-disk:";
+const ZOD_SPECIFIERS = new Set(["zod", "zod/v3", "zod/v4", "zod/v4-mini", "zod/v4/core"]);
+const zodFromDisk = {
+  name: "t3:zod-from-disk",
+  // Ahead of the dependency plugin, which would otherwise mark zod external first.
+  resolveId: {
+    order: "pre" as const,
+    handler(source: string, importer: string | undefined) {
+      if (!ZOD_SPECIFIERS.has(source)) return null;
+      return importer?.startsWith(ZOD_FROM_DISK_PREFIX)
+        ? { id: source, external: true }
+        : `${ZOD_FROM_DISK_PREFIX}${source}`;
+    },
+  },
+  load(id: string) {
+    if (!id.startsWith(ZOD_FROM_DISK_PREFIX)) return null;
+    const specifier = id.slice(ZOD_FROM_DISK_PREFIX.length);
+    return `module.exports = require(${JSON.stringify(specifier)});`;
+  },
+};
+
 export default mergeConfig(
   baseConfig,
   defineConfig({
@@ -82,6 +108,7 @@ export default mergeConfig(
       outDir: packExecutable ? "dist-exe" : "dist",
       sourcemap: !packExecutable,
       clean: true,
+      plugins: [zodFromDisk],
       ...(packExecutable
         ? {
             exe: {
@@ -104,7 +131,8 @@ export default mergeConfig(
         // dependency would still be bundled — which silently inlined native
         // loaders such as node-gyp-build, losing native acceleration.
         alwaysBundle: shouldBundleCliDependency,
-        neverBundle: (id: string) => isExternalCliDependency(id),
+        // zod still loads from disk, through zodFromDisk's `require` rather than an import.
+        neverBundle: (id: string) => !ZOD_SPECIFIERS.has(id) && isExternalCliDependency(id),
         onlyBundle: false,
       },
       banner: {
