@@ -69,7 +69,7 @@ function parseFrontmatterBoolean(value: unknown): boolean | undefined {
   }
 }
 
-function parseSkillFrontmatter(contents: string): SkillFrontmatter {
+export function parseSkillFrontmatter(contents: string): SkillFrontmatter {
   const match = FRONTMATTER_PATTERN.exec(contents);
   if (!match) {
     return { kind: "missing" };
@@ -290,7 +290,7 @@ const readSkillOverrides = Effect.fn("readSkillOverrides")(function* (
  * `CLAUDE_CONFIG_DIR` by `makeClaudeEnvironment`), then a `CLAUDE_CONFIG_DIR`
  * already present in the process environment, then `~/.claude`.
  */
-const resolveClaudeConfigDirPath = Effect.fn("resolveClaudeConfigDirPath")(function* (
+export const resolveClaudeConfigDirPath = Effect.fn("resolveClaudeConfigDirPath")(function* (
   config: Pick<ClaudeSettings, "homePath">,
   environment: NodeJS.ProcessEnv,
   cwd?: string,

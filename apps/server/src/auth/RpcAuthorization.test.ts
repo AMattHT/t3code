@@ -133,6 +133,18 @@ describe("RPC authorization scopes", () => {
     );
   });
 
+  it("requires settings writes to change the skill library while anyone can read it", () => {
+    for (const method of [
+      WS_METHODS.skillLibraryAdd,
+      WS_METHODS.skillLibraryUpdate,
+      WS_METHODS.skillLibraryRemove,
+      WS_METHODS.skillLibrarySetEnabled,
+    ]) {
+      expect(requiredScopeForRpcMethod(method)).toBe(AuthSettingsWriteScope);
+    }
+    expect(requiredScopeForRpcMethod(WS_METHODS.skillLibraryList)).toBe(AuthOrchestrationReadScope);
+  });
+
   it("separates viewing pull request file progress from writing it", () => {
     expect(requiredScopeForRpcMethod(WS_METHODS.pullRequestsFilesViewed)).toBe(
       AuthOrchestrationReadScope,

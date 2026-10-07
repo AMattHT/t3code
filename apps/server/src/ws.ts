@@ -179,6 +179,7 @@ import { withTerminalOutputWindow } from "./terminal/OutputProtocol.ts";
 import * as PreviewAutomationBroker from "./mcp/PreviewAutomationBroker.ts";
 import * as ServerBrowser from "./preview/ServerBrowser.ts";
 import * as DeviceService from "./device/DeviceService.ts";
+import * as SkillLibrary from "./skills/SkillLibrary.ts";
 import { remoteSshDeviceHosts } from "./device/localSshDeviceHost.ts";
 import * as PreviewManager from "./preview/Manager.ts";
 import { issueAssetUrl } from "./assets/AssetAccess.ts";
@@ -1225,6 +1226,7 @@ const layerWsRpc = (
       const pullRequests = yield* PullRequestService.PullRequestService;
       const pullRequestSync = yield* PullRequestSyncReactor.PullRequestSyncReactor;
       const deviceService = yield* DeviceService.DeviceService;
+      const skillLibrary = yield* SkillLibrary.SkillLibrary;
       const deviceHostContext =
         yield* Effect.context<Effect.Services<ReturnType<typeof remoteSshDeviceHosts>>>();
       const orchestrationEngine = yield* Orchestrator.OrchestratorV2;
@@ -2886,6 +2888,11 @@ const layerWsRpc = (
         [WS_METHODS.previewClearProfile]: (input) => serverBrowser.clearProfile(input.profileId),
         [WS_METHODS.previewReportStatus]: (input) => previewManager.reportStatus(input),
         [WS_METHODS.subscribePreviewEvents]: (_input) => previewManager.events,
+        [WS_METHODS.skillLibraryList]: () => skillLibrary.list,
+        [WS_METHODS.skillLibraryAdd]: (input) => skillLibrary.add(input),
+        [WS_METHODS.skillLibraryUpdate]: (input) => skillLibrary.update(input),
+        [WS_METHODS.skillLibraryRemove]: (input) => skillLibrary.remove(input),
+        [WS_METHODS.skillLibrarySetEnabled]: (input) => skillLibrary.setEnabled(input),
         [WS_METHODS.deviceConfigure]: (input) => deviceService.configure(input),
         [WS_METHODS.deviceTestHost]: (input) => deviceService.testHost(input),
         [WS_METHODS.deviceList]: (input) =>

@@ -274,6 +274,12 @@ import {
   DeviceSession,
   DeviceShutdownInput,
 } from "./device.ts";
+import {
+  SkillLibraryError,
+  SkillLibraryRepositoryInput,
+  SkillLibrarySetEnabledInput,
+  SkillLibraryState,
+} from "./skillLibrary.ts";
 import {} from "./previewAutomation.ts";
 import {
   ServerConfigStreamEvent,
@@ -450,6 +456,13 @@ export const WS_METHODS = {
   deviceShutdown: "device.shutdown",
   deviceDetail: "device.detail",
   deviceAction: "device.action",
+
+  // Skill library methods
+  skillLibraryList: "skillLibrary.list",
+  skillLibraryAdd: "skillLibrary.add",
+  skillLibraryUpdate: "skillLibrary.update",
+  skillLibraryRemove: "skillLibrary.remove",
+  skillLibrarySetEnabled: "skillLibrary.setEnabled",
 
   // Server meta
   serverProbe: "server.probe",
@@ -1537,6 +1550,36 @@ const WsDeviceActionRpc = Rpc.make(WS_METHODS.deviceAction, {
   error: Schema.Union([DeviceError, EnvironmentAuthorizationError]),
 });
 
+const WsSkillLibraryListRpc = Rpc.make(WS_METHODS.skillLibraryList, {
+  payload: Schema.Struct({}),
+  success: SkillLibraryState,
+  error: Schema.Union([SkillLibraryError, EnvironmentAuthorizationError]),
+});
+
+const WsSkillLibraryAddRpc = Rpc.make(WS_METHODS.skillLibraryAdd, {
+  payload: SkillLibraryRepositoryInput,
+  success: SkillLibraryState,
+  error: Schema.Union([SkillLibraryError, EnvironmentAuthorizationError]),
+});
+
+const WsSkillLibraryUpdateRpc = Rpc.make(WS_METHODS.skillLibraryUpdate, {
+  payload: SkillLibraryRepositoryInput,
+  success: SkillLibraryState,
+  error: Schema.Union([SkillLibraryError, EnvironmentAuthorizationError]),
+});
+
+const WsSkillLibraryRemoveRpc = Rpc.make(WS_METHODS.skillLibraryRemove, {
+  payload: SkillLibraryRepositoryInput,
+  success: SkillLibraryState,
+  error: Schema.Union([SkillLibraryError, EnvironmentAuthorizationError]),
+});
+
+const WsSkillLibrarySetEnabledRpc = Rpc.make(WS_METHODS.skillLibrarySetEnabled, {
+  payload: SkillLibrarySetEnabledInput,
+  success: SkillLibraryState,
+  error: Schema.Union([SkillLibraryError, EnvironmentAuthorizationError]),
+});
+
 const WsSubscribeDeviceStateRpc = Rpc.make(WS_METHODS.subscribeDeviceState, {
   payload: Schema.Struct({}),
   success: DeviceServiceState,
@@ -1946,6 +1989,11 @@ export const WsRpcGroup = RpcGroup.make(
   WsDeviceDetailRpc,
   WsDeviceActionRpc,
   WsSubscribeDeviceStateRpc,
+  WsSkillLibraryListRpc,
+  WsSkillLibraryAddRpc,
+  WsSkillLibraryUpdateRpc,
+  WsSkillLibraryRemoveRpc,
+  WsSkillLibrarySetEnabledRpc,
   WsSubscribeServerConfigRpc,
   WsSubscribeServerLifecycleRpc,
   WsSubscribeAuthAccessRpc,
