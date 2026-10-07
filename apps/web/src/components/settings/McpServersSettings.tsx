@@ -23,6 +23,7 @@ import { useAtomCommand } from "../../state/use-atom-command";
 import { Button } from "../ui/button";
 import { Input } from "../ui/input";
 import { Menu, MenuItem, MenuPopup, MenuTrigger } from "../ui/menu";
+import { RedactedSensitiveText } from "./RedactedSensitiveText";
 import { Spinner } from "../ui/spinner";
 import { Switch } from "../ui/switch";
 import { SettingsPageContainer, SettingsSection } from "./settingsLayout";
@@ -264,32 +265,44 @@ function McpServerRow({
     <div>
       <div className="flex items-center gap-3 px-3 py-3 sm:px-4">
         <ServerIcon server={server} />
-        <button
-          type="button"
-          className="min-w-0 flex-1 text-left"
-          aria-expanded={expanded}
-          disabled={server.tools.length === 0}
-          onClick={() => setExpanded((value) => !value)}
-        >
-          <span className="flex items-center gap-1.5 text-sm font-medium">
+        <div className="min-w-0 flex-1">
+          <button
+            type="button"
+            className="flex max-w-full items-center gap-1.5 text-left text-sm font-medium"
+            aria-expanded={expanded}
+            disabled={server.tools.length === 0}
+            onClick={() => setExpanded((value) => !value)}
+          >
             <span className="truncate">{server.name}</span>
             {server.tools.length > 0 ? (
               <ChevronDownIcon
                 className={cn("size-3.5 shrink-0 text-muted-foreground", expanded && "rotate-180")}
               />
             ) : null}
-          </span>
-          <span
-            className={cn(
-              "block truncate text-xs",
-              server.enabled && server.status !== "connected" && !waitingForSignIn
-                ? "text-warning"
-                : "text-muted-foreground",
-            )}
-          >
-            {signInError ?? statusText(server, waitingForSignIn)}
-          </span>
-        </button>
+          </button>
+          <div className="flex min-w-0 items-center gap-1.5 text-xs">
+            <span
+              className={cn(
+                "truncate",
+                server.enabled && server.status !== "connected" && !waitingForSignIn
+                  ? "text-warning"
+                  : "text-muted-foreground",
+              )}
+            >
+              {signInError ?? statusText(server, waitingForSignIn)}
+            </span>
+            {server.account && server.signedIn ? (
+              <RedactedSensitiveText
+                key={server.account}
+                value={server.account}
+                ariaLabel={`Toggle the account signed in to ${server.name}`}
+                revealTooltip="Click to reveal account"
+                hideTooltip="Click to hide account"
+                className="max-w-48 truncate"
+              />
+            ) : null}
+          </div>
+        </div>
         {needsSignIn ? (
           <Button size="sm" variant="outline" disabled={disabled} onClick={startSignIn}>
             {waitingForSignIn ? "Open again" : server.signedIn ? "Reconnect" : "Sign in"}

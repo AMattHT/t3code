@@ -51,6 +51,8 @@ export const McpServerEntry = Schema.Struct({
   status: McpServerStatus,
   /** Whether T3 holds a sign-in for this server, even an expired one. */
   signedIn: Schema.Boolean,
+  /** The signed-in account's email or name, when the server's sign-in reports one. */
+  account: Schema.optional(Schema.String),
   /** Why the last connection failed, when `status` is `error`. */
   error: Schema.optional(Schema.String),
   /** The server's logo as a data URL, from its MCP metadata or its website. */
@@ -114,6 +116,7 @@ export class McpServerError extends Schema.TaggedError<McpServerError>()("McpSer
     "not_signed_in",
     "unreachable",
     "sign_in_failed",
+    "client_not_allowed",
     "tool_failed",
     "storage_failed",
   ]),
@@ -130,6 +133,7 @@ export class McpServerError extends Schema.TaggedError<McpServerError>()("McpSer
       not_signed_in: `${server} needs you to sign in under Settings → MCP servers.`,
       unreachable: `${server} could not be reached.`,
       sign_in_failed: `Signing in to ${server} failed. Try again.`,
+      client_not_allowed: `${server} only accepts sign-ins from apps it has approved, and T3 Code is not one of them yet.`,
       tool_failed: `${server} could not run that tool.`,
       storage_failed: "MCP server settings could not be read or saved on this environment.",
     }[this.reason];

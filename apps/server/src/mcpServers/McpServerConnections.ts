@@ -19,6 +19,12 @@ import {
 } from "@modelcontextprotocol/sdk/client/auth.js";
 import { Client } from "@modelcontextprotocol/sdk/client/index.js";
 import {
+  AccessDeniedError,
+  InvalidClientMetadataError,
+  ServerError,
+  UnauthorizedClientError,
+} from "@modelcontextprotocol/sdk/server/auth/errors.js";
+import {
   StreamableHTTPClientTransport,
   StreamableHTTPError,
 } from "@modelcontextprotocol/sdk/client/streamableHttp.js";
@@ -93,6 +99,7 @@ const decodeManifest = Schema.decodeUnknownEffect(Schema.fromJsonString(Manifest
 /** What the secret store holds per server. The SDK owns the inner shapes. */
 const StoredSignIn = Schema.Struct({
   redirectUrl: Schema.String,
+  account: Schema.optional(Schema.String),
   clientInformation: Schema.optional(Schema.Record(Schema.String, Schema.Unknown)),
   tokens: Schema.optional(Schema.Record(Schema.String, Schema.Unknown)),
 });
@@ -101,6 +108,7 @@ const decodeStoredSignIn = Schema.decodeUnknownOption(Schema.fromJsonString(Stor
 /** The mutable sign-in state the SDK reads and writes during one flow or connection. */
 interface SignInSession {
   redirectUrl: string;
+  account?: string;
   clientInformation: OAuthClientInformationMixed | undefined;
   tokens: OAuthTokens | undefined;
   codeVerifier?: string;
@@ -108,9 +116,35 @@ interface SignInSession {
   authorizationUrl?: URL;
 }
 
+/**
+ * Who signed in, for display: the email or name in an OpenID id_token, or in
+ * an access token that is itself a JWT. Read only to label the account; the
+ * server that issued the token is what trusts it.
+ */
+const accountFromTokens = (tokens: OAuthTokens | undefined): string | undefined => {
+  for (const token of [tokens?.id_token, tokens?.access_token]) {
+    const payload = token?.split(".")[1];
+    if (payload === undefined) continue;
+    try {
+      const claims = JSON.parse(Buffer.from(payload, "base64url").toString("utf8")) as Record<
+        string,
+        unknown
+      >;
+      for (const claim of ["email", "preferred_username", "name", "username"]) {
+        const value = claims[claim];
+        if (typeof value === "string" && value.trim().length > 0) return value.trim().slice(0, 200);
+      }
+    } catch {
+      // Not a JWT; nothing to show.
+    }
+  }
+  return undefined;
+};
+
 const sessionSnapshot = (session: SignInSession) =>
   JSON.stringify({
     redirectUrl: session.redirectUrl,
+    ...(session.account === undefined ? {} : { account: session.account }),
     clientInformation: session.clientInformation,
     tokens: session.tokens,
   });
@@ -137,6 +171,9 @@ const makeAuthProvider = (session: SignInSession): OAuthClientProvider => ({
   tokens: () => session.tokens,
   saveTokens: (tokens) => {
     session.tokens = tokens;
+    // A refresh often omits the id_token; keep the account it named before.
+    const account = accountFromTokens(tokens);
+    if (account !== undefined) session.account = account;
   },
   // T3 hands the URL to the user's browser itself; outside a sign-in, a
   // request for one means the stored sign-in no longer works.
@@ -207,6 +244,17 @@ const failureReason = (error: unknown): string => {
   }
   if (Cause.isTimeoutError(cause)) return "The server did not answer in time.";
   return "The server could not be reached.";
+};
+
+/** How servers that allowlist their clients turn away dynamic registration. */
+const isRegistrationRefusal = (error: unknown): boolean => {
+  const cause = isMcpUpstreamError(error) ? error.cause : error;
+  return (
+    cause instanceof UnauthorizedClientError ||
+    cause instanceof AccessDeniedError ||
+    cause instanceof InvalidClientMetadataError ||
+    (cause instanceof ServerError && /^HTTP 40[13]\b/.test(cause.message))
+  );
 };
 
 const slugify = (value: string) =>
@@ -349,6 +397,7 @@ const make = Effect.gen(function* () {
 
   const sessionFrom = (stored: typeof StoredSignIn.Type): SignInSession => ({
     redirectUrl: stored.redirectUrl,
+    ...(stored.account === undefined ? {} : { account: stored.account }),
     clientInformation: stored.clientInformation as OAuthClientInformationMixed | undefined,
     tokens: stored.tokens as OAuthTokens | undefined,
   });
@@ -468,7 +517,11 @@ const make = Effect.gen(function* () {
   const entryFor = (server: ManifestServer) =>
     Effect.gen(function* () {
       const connection = server.enabled ? yield* ensureConnected(server) : undefined;
-      const signedIn = Option.isSome(yield* readSignIn(server.id));
+      const stored = yield* readSignIn(server.id);
+      const account = Option.isSome(stored)
+        ? (stored.value.account ??
+          accountFromTokens(stored.value.tokens as OAuthTokens | undefined))
+        : undefined;
       const icon = yield* readIcon(server.id);
       return {
         id: server.id,
@@ -481,7 +534,8 @@ const make = Effect.gen(function* () {
             : connection._tag === "Connected"
               ? "connected"
               : connection.status,
-        signedIn,
+        signedIn: Option.isSome(stored),
+        ...(account === undefined ? {} : { account }),
         ...(connection?._tag === "Failed" && connection.error !== undefined
           ? { error: connection.error }
           : {}),
@@ -596,6 +650,9 @@ const make = Effect.gen(function* () {
     ).toString("base64url");
     const session: SignInSession = {
       redirectUrl,
+      ...(Option.isSome(stored) && stored.value.account !== undefined
+        ? { account: stored.value.account }
+        : {}),
       // A client registered for another origin cannot use this redirect.
       clientInformation:
         Option.isSome(stored) && stored.value.redirectUrl === redirectUrl
@@ -607,7 +664,12 @@ const make = Effect.gen(function* () {
     const signInFailed = (cause: unknown) =>
       new McpServerError({
         operation: "signIn",
-        reason: "sign_in_failed",
+        // Before the redirect the only write is client registration, so a
+        // refusal with no registration saved means the server rejected T3.
+        reason:
+          session.clientInformation === undefined && isRegistrationRefusal(cause)
+            ? "client_not_allowed"
+            : "sign_in_failed",
         server: server.name,
         cause,
       });

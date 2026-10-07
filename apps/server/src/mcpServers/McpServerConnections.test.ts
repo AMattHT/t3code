@@ -69,7 +69,15 @@ const makeUpstream = () => {
 };
 
 /** An MCP server, optionally behind a minimal OAuth authorization server. */
-const startFixture = (requireAuth: boolean): Promise<Fixture> =>
+const jwt = (claims: Record<string, unknown>) =>
+  ["{}", JSON.stringify(claims), "signature"]
+    .map((part) => Buffer.from(part).toString("base64url"))
+    .join(".");
+
+const startFixture = (
+  requireAuth: boolean,
+  options: { readonly refuseRegistration?: boolean } = {},
+): Promise<Fixture> =>
   new Promise((resolve) => {
     const validTokens = new Set<string>();
     const registrations: Array<{ readonly redirect_uris: ReadonlyArray<string> }> = [];
@@ -100,6 +108,11 @@ const startFixture = (requireAuth: boolean): Promise<Fixture> =>
         });
       }
       if (path === "/register") {
+        // Servers that allowlist their clients answer like Figma does.
+        if (options.refuseRegistration) {
+          response.writeHead(403);
+          return response.end("Forbidden");
+        }
         const registration = JSON.parse(await readBody(request));
         registrations.push(registration);
         return json(response, 201, {
@@ -117,8 +130,11 @@ const startFixture = (requireAuth: boolean): Promise<Fixture> =>
         if (!accepted) return json(response, 400, { error: "invalid_grant" });
         const token = `token-${validTokens.size + 1}`;
         validTokens.add(token);
+        const refreshing = form.get("grant_type") === "refresh_token";
         return json(response, 200, {
           access_token: token,
+          // Like most providers, a refresh does not repeat the id_token.
+          ...(refreshing ? {} : { id_token: jwt({ sub: "user-1", email: "maker@example.com" }) }),
           token_type: "Bearer",
           refresh_token: "refresh-1",
           expires_in: 3600,
@@ -261,7 +277,11 @@ describe("McpServerConnections", () => {
           });
           expect(name).toBe("Fixture");
           const state = yield* connections.list;
-          expect(state.servers[0]).toMatchObject({ status: "connected", signedIn: true });
+          expect(state.servers[0]).toMatchObject({
+            status: "connected",
+            signedIn: true,
+            account: "maker@example.com",
+          });
           expect(
             yield* connections.callTool({
               server: "fixture",
@@ -310,6 +330,23 @@ describe("McpServerConnections", () => {
               arguments: { text: "again" },
             }),
           ).toMatchObject({ content: [{ type: "text", text: "echo: again" }] });
+          expect((yield* connections.list).servers[0]?.account).toBe("maker@example.com");
+        }),
+      );
+    }),
+  );
+
+  it.effect("says plainly when a server refuses to let T3 Code sign in", () =>
+    Effect.gen(function* () {
+      const fixture = yield* Effect.promise(() => startFixture(true, { refuseRegistration: true }));
+      return yield* withConnections(fixture, (connections) =>
+        Effect.gen(function* () {
+          yield* connections.add({ url: fixture.url, name: "Fixture" });
+          const refused = yield* connections
+            .signIn({ id: "fixture", redirectBaseUrl: REDIRECT_BASE })
+            .pipe(Effect.flip);
+          expect(refused.reason).toBe("client_not_allowed");
+          expect(refused.message).toContain("only accepts sign-ins from apps it has approved");
         }),
       );
     }),

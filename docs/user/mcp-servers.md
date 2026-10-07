@@ -11,6 +11,9 @@ URL, such as `https://mcp.higgsfield.ai/mcp`. If the server needs an account,
 choose **Sign in** and finish in the browser tab that opens. The row shows the
 server's tools once it connects.
 
+Some services, such as Figma, only accept sign-ins from apps they have
+approved. T3 Code tells you when a server turns it away.
+
 The switch turns a server off without signing out. **Sign out** and **Remove**
 are in the row's menu. When a sign-in stops working, the row offers
 **Reconnect**.
